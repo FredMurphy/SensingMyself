@@ -6,15 +6,19 @@
 #include <time.h>
 #include <sys/time.h>
 
+#include <applibs/i2c.h>
+#include <applibs/log.h>
+#include <applibs/gpio.h>
+
 #include "algorithm_by_RF.h"
 #include "applibs_versions.h"
 #include "azure_iot_utilities.h"
 #include "connection_strings.h"
 #include "mt3620_avnet_dev.h"
 #include "max30102.h"
-#include <applibs/i2c.h>
-#include <applibs/log.h>
-#include <applibs/gpio.h>
+#include "oledc_driver.h"
+#include "fonts.h"
+#include "pictures.h"
 
 static int i2cFd = -1;
 static int hr4InterruptPinFd = -1;
@@ -34,9 +38,21 @@ static volatile int takingReadings = false;
 #define JSON_TEMPLATE "{ \"deviceId\": \"fred\", \"heart_rate\": %d, \"o2\": %.2f }"
 char* jsonBuffer[JSON_BUFFER_SIZE];
 
+#define TEXT_BUFFER_SIZE 30
+char* textBuffer[TEXT_BUFFER_SIZE];
+
 const struct timespec sleepTime1s = { 1, 0 };
+const struct timespec sleepTime1ms = { 0 , 1000000 };
 
 bool get_hr4_readings(int32_t* heart_rate, float* spo2);
+
+void show_splash_screen();
+
+void display_reading();
+
+void display_failed();
+
+void display_prompt();
 
 void init_gpio(void) {
 	hr4InterruptPinFd = GPIO_OpenAsInput(HR4_INT);
@@ -110,50 +126,33 @@ void hr4_write_i2c(uint8_t addr, uint16_t count, uint8_t* ptr)
 }
 
 /*
-Entry point for direct method call from IoT Hub
+Process incoming Cloud to Device Method
 */
-const char* okResponse = "{ \"message\": \"OK\" }";
-const char* errorResponse = "{ \"message\": \"Not found\" }";
-
-int directMethodCall(const char* directMethodName, const char* payload, size_t payloadSize, char** responsePayload, size_t* responsePayloadSize) {
-
-	// We're just checking connectivity
-	if (strcmp(directMethodName, "Connect") == 0) {
-		*responsePayload = okResponse;
-		*responsePayloadSize = strlen(okResponse);
-		return 200;
-	}
-
-	// Trigger a reading to be posted to IoT Hub on completeion
-	if (strcmp(directMethodName, "Read") == 0) {
-		if (!takingReadings)
-			takeReadings = true;
-		*responsePayload = okResponse;
-		*responsePayloadSize = strlen(okResponse);
-		return 200;
-	}
-
-	*responsePayload = errorResponse;
-	*responsePayloadSize = strlen(errorResponse);
-	return 404;
-}
-
 void messageCall(const char* payload) {
+	// If it's "Read" then take a reading
 	if ((strcmp(payload, "Read") == 0) && !takingReadings)
 		takeReadings = true;
 }
 
+float o2;
+int heart_rate;
+
+#define COLOUR_RED	0xF800
+#define COLOUR_GREEN 0x07E0
+#define COLOUR_BLUE 0x104F
+
 int main(void)
 {
-	float o2;
-	int heart_rate;
-
+	// Init GPIO and I2C
 	init_gpio();
 	init_i2c();
 
+	oledc_spiDriverInit((T_OLEDC_P)0, (T_OLEDC_P)0);
+	oledc_init();
+	show_splash_screen();
+
 	// Initialize Heart Rate 4 sensor
 	maxim_max30102_i2c_setup(hr4_read_i2c, hr4_write_i2c);
-
 	Log_Debug("HeartRate Click 4 - Revision: 0x%02X, Part Id: 0x%02X\n", max30102_get_revision(), max30102_get_part_id());
 
 	if (!AzureIoT_SetupClient()) {
@@ -161,15 +160,17 @@ int main(void)
 		return;
 	}
 
-	AzureIoT_SetDirectMethodCallback(&directMethodCall);
+	// Wait for any incoming Cloud to Device messages
 	AzureIoT_SetMessageReceivedCallback(&messageCall);
+
+	uint8_t screenTimeout = 10;
 
 	// Wait. Everything else is driven from an incoming direct method call
 	while (!terminationRequired) {
 
 		// Blink green LED to show we're running and connected to Azure IoT Hub
 		GPIO_SetValue(greenLedFd, GPIO_Value_Low);
-		nanosleep(&sleepTime1s, NULL);
+		nanosleep(&sleepTime1ms, NULL);
 		GPIO_SetValue(greenLedFd, GPIO_Value_High);
 		nanosleep(&sleepTime1s, NULL);
 
@@ -179,26 +180,79 @@ int main(void)
 		if (takingReadings)
 			continue;
 
+		if (screenTimeout) {
+			if (--screenTimeout == 0)
+				oledc_enable(0);
+		}
+
+		// Button A will trigger a heart rate / O2 reading
 		GPIO_Value_Type buttonAState;
 		int result = GPIO_GetValue(buttonAGpioFd, &buttonAState);
 		if (buttonAState == GPIO_Value_Low)
 			takeReadings = true;
 
 		if (takeReadings) {
+			// Take a reading
 			takingReadings = true;
 			takeReadings = false;
 			GPIO_SetValue(redLedFd, GPIO_Value_Low);
+
+			display_prompt();
+
+			oledc_enable(1);
+
 			if (get_hr4_readings(&heart_rate, &o2)) {
+				// Send reading to Azure IoT Hub
 				snprintf(jsonBuffer, JSON_BUFFER_SIZE, JSON_TEMPLATE, heart_rate, o2);
 				Log_Debug("Sending: %s\n", jsonBuffer);
 				AzureIoT_SendMessage(jsonBuffer);
+
+				display_reading();
+			}
+			else {
+				display_failed();
 			}
 			GPIO_SetValue(redLedFd, GPIO_Value_High);
 			takingReadings = false;
+			screenTimeout = 10;
 		}
 	}
 
 	Log_Debug("Exiting");
+}
+
+void display_prompt()
+{
+	oledc_rectangle(0, 48, 96, 96, 0xFFFF);
+	oledc_set_font(guiFont_Tahoma_8_Regular, COLOUR_BLUE, _OLEDC_FO_HORIZONTAL);
+	oledc_text("Please place finger", 2, 50);
+	oledc_text("on sensor", 2, 62);
+}
+
+void display_failed()
+{
+	oledc_rectangle(0, 48, 96, 96, 0xFFFF);
+	oledc_set_font(guiFont_Tahoma_8_Regular, COLOUR_RED, _OLEDC_FO_HORIZONTAL);
+	oledc_text("Reading failed", 2, 50);
+}
+
+void display_reading()
+{
+	oledc_rectangle(0, 48, 96, 96, 0xFFFF);
+	oledc_set_font(guiFont_Tahoma_8_Regular, COLOUR_GREEN, _OLEDC_FO_HORIZONTAL);
+	snprintf(textBuffer, TEXT_BUFFER_SIZE, "Heart rate %dbpm", heart_rate);
+	oledc_text(textBuffer, 2, 50);
+	snprintf(textBuffer, TEXT_BUFFER_SIZE, "SpO2 %.2f\%", o2);
+	oledc_text(textBuffer, 2, 62);
+}
+
+void show_splash_screen()
+{
+	oledc_fill_screen(0xFFFF);
+	oledc_image(heart_bmp, 0, 0);
+	oledc_set_font(guiFont_Tahoma_10_Regular, COLOUR_RED, _OLEDC_FO_HORIZONTAL);
+	oledc_text("Heart", 50, 8);
+	oledc_text("Sensor", 50, 22);
 }
 
 
@@ -263,11 +317,5 @@ bool get_hr4_readings(int32_t* heart_rate, float* spo2) {
 	}
 
 	max301024_shut_down(1);
-
-	// Fake some values
-	*heart_rate = 70;
-	*spo2 = 99;
-	return true;
-
-	//return false;
+	return false;
 }

@@ -24,8 +24,19 @@ namespace SensingMyself
 
         public List<Reading> GetToday()
         {
+            return GetReadingsBetween(DateTime.Today, DateTime.Today.AddDays(1));
+        }
+
+        public DateTime? GetLastReadingDateTime()
+        {
+            var readings = GetReadingsBetween(DateTime.Today.AddDays(-1), DateTime.Today.AddDays(1));
+
+            return readings.Max(r => r.TimeStamp);
+        }
+        private List<Reading> GetReadingsBetween(DateTime from, DateTime to)
+        {
             var readings = new List<Reading>();
-            DateTimeRange SearchToday = new DateTimeRange(DateTime.Today.ToUniversalTime(), DateTime.Today.AddDays(1).ToUniversalTime());
+            DateTimeRange SearchToday = new DateTimeRange(from.ToUniversalTime(), to.ToUniversalTime());
 
             string continuationToken;
             do
@@ -41,6 +52,7 @@ namespace SensingMyself
             while (continuationToken != null);
 
             return readings;
+
         }
 
         private List<Reading> ParseReadings(QueryResultPage queryResultPage)

@@ -25,7 +25,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'" Label="Configuration">
     <UseDebugLibraries>true</UseDebugLibraries>
-    <TargetSysroot>2+Beta1905</TargetSysroot>
+    <TargetSysroot>3+Beta1909</TargetSysroot>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'" Label="Configuration">
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -39,6 +39,8 @@
   <ItemGroup>
     <ClCompile Include="azure_iot_utilities.c" />
     <ClCompile Include="main.c" />
+    <ClCompile Include="oledc_driver.c" />
+    <ClCompile Include="oledc_hal.c" />
     <ClCompile Include="parson.c" />
     <UpToDateCheckInput Include="app_manifest.json" />
   </ItemGroup>
@@ -46,8 +48,12 @@
     <ClInclude Include="applibs_versions.h" />
     <ClInclude Include="azure_iot_utilities.h" />
     <ClInclude Include="connection_strings.h" />
+    <ClInclude Include="fonts.h" />
     <ClInclude Include="mt3620_avnet_dev.h" />
+    <ClInclude Include="oledc_driver.h" />
+    <ClInclude Include="oledc_hal.h" />
     <ClInclude Include="parson.h" />
+    <ClInclude Include="pictures.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\HeartRate4\HeartRate4.vcxproj">

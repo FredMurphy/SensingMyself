@@ -25,6 +25,12 @@
     <ClCompile Include="parson.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="oledc_driver.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="oledc_hal.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="applibs_versions.h">
@@ -40,6 +46,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="parson.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fonts.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="oledc_driver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="oledc_hal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pictures.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -11,6 +11,8 @@ namespace SensingMyself
         private static HeartService heartService;
         private static ServiceClient serviceClient;
 
+        private static NotifyIcon trayIcon;
+
         /// <summary>
         /// The main entry point for the application.
         /// </summary>
@@ -21,12 +23,12 @@ namespace SensingMyself
             Application.SetCompatibleTextRenderingDefault(false);
             
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Today", null, TodayClick);
+            menu.Items.Add("View today's summary", null, TodayClick);
             menu.Items.Add("Take a reading", null, ReadingClick);
             menu.Items.Add("About", null, AboutClick);
             menu.Items.Add("Exit", null, ExitClick);
 
-            var tray = new NotifyIcon
+            trayIcon = new NotifyIcon
             {
                 Visible = true,
                 Text = "Sensing Myself",
@@ -34,33 +36,78 @@ namespace SensingMyself
                 ContextMenuStrip = menu
             };
 
+            var timer = new Timer { Interval = 10000, Enabled = true };
+            timer.Tick += Timer_Tick;
+
             Application.Run();
 
         }
 
-        private static void ReadingClick(object sender, EventArgs e)
+        private static void Timer_Tick(object sender, EventArgs e)
         {
+           if (HaveNaggedRecently())
+                return;
+
+            if (HaveTakenReadingRecently())
+                return;
+
+            TakeReading();
+        }
+
+        private static bool HaveNaggedRecently()
+        {
+            DateTime lastNagged;
+            if (DateTime.TryParse(ConfigurationManager.AppSettings["LastNagged"], out lastNagged))
+                return (DateTime.Now.Subtract(lastNagged) < TimeSpan.FromMinutes(60));
+            else
+                return false;
+        }
+
+        private static bool HaveTakenReadingRecently()
+        {
+            DateTime? lastReadingDateTime = GetHeartService().GetLastReadingDateTime();
+
+            return (lastReadingDateTime.HasValue && DateTime.Now.Subtract(lastReadingDateTime.Value) < TimeSpan.FromMinutes(120));
+        }
+
+        private static void TakeReading()
+        {
+            trayIcon.BalloonTipTitle = "Hi";
+            trayIcon.BalloonTipText = "Please take a heart rate and blood oxygen reading";
+            trayIcon.ShowBalloonTip(5000);
+
             GetServiceClient().SendAsync(
                 "SensingMe",
                 new Microsoft.Azure.Devices.Message(Encoding.ASCII.GetBytes("Read")),
                 TimeSpan.FromSeconds(10)).Wait();
+
+            // Set last nagged
+            ConfigurationManager.AppSettings.Set("LastNagged",DateTime.Now.ToString());
         }
+
+        private static void ReadingClick(object sender, EventArgs e)
+        {
+            TakeReading();
+        }
+
 
         private static void TodayClick(object sender, EventArgs e)
         {
-            var readings = GetHeartService().GetToday();
+            var today = new Today();
+            today.ShowDialog();
         }
 
         private static void AboutClick(object sender, EventArgs e)
         {
-            MessageBox.Show("about!");
+            var about = new About();
+            about.ShowDialog();
         }
         private static void ExitClick(object sender, EventArgs e)
         {
             Application.Exit();
         }
 
-        private static HeartService GetHeartService()
+        public static HeartService GetHeartService()
         {
             return heartService ?? (heartService = new HeartService());
         }
