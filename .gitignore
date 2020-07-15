@@ -338,3 +338,4 @@ ASALocalRun/
 
 # BeatPulse healthcheck temp database
 healthchecksdb
+/SensingMyselfDevice/SensingMyselfDevice/out/ARM-Debug
